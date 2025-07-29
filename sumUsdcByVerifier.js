@@ -60,7 +60,8 @@ async function scanActiveDeposits() {
   }
 
   // Step 2: Find the highest cached ID to start scanning from
-  const highestCachedId = cachedIds.length > 0 ? Math.max(...cachedIds) : -1;
+  console.log('🔍 Debug: cachedIds types:', cachedIds.slice(0, 5).map(id => typeof id));
+  const highestCachedId = cachedIds.length > 0 ? Math.max(...cachedIds.map(id => Number(id))) : -1;
   const startScanFrom = highestCachedId + 1;
   
   console.log(`🔍 Step 2: Scanning NEW deposits from ${startScanFrom} to ${depositCount - 1}...`);
