@@ -49,7 +49,7 @@ async function scanActiveDeposits() {
     try {
       const [deposit] = await escrow.getDepositFromIds([id]);
       if (deposit.deposit.acceptingIntents) {
-        activeDepositIds.add(id);
+        activeDepositIds.add(Number(id));
         console.log(`✅ Deposit ${id} still ACTIVE`);
       } else {
         console.log(`❌ Deposit ${id} now INACTIVE`);
@@ -60,7 +60,7 @@ async function scanActiveDeposits() {
   }
 
   // Step 2: Find the highest cached ID to start scanning from
-  const highestCachedId = cachedIds.length > 0 ? Math.max(...cachedIds.map(id => parseInt(id.toString()))) : -1;
+  const highestCachedId = cachedIds.length > 0 ? Math.max(...cachedIds) : -1;
   const startScanFrom = highestCachedId + 1;
   
   console.log(`🔍 Step 2: Scanning NEW deposits from ${startScanFrom} to ${depositCount - 1}...`);
@@ -74,7 +74,7 @@ async function scanActiveDeposits() {
         const id = deposit.depositId;
         const accepting = deposit.deposit.acceptingIntents;
         if (accepting) {
-          activeDepositIds.add(id);
+          activeDepositIds.add(Number(id));
           console.log(`🆕 Deposit ${id} is ACTIVE (NEW)`);
         }
       }
