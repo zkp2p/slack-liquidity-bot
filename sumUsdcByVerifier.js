@@ -41,7 +41,7 @@ async function scanActiveDeposits() {
   const cachedIds = loadCachedIds();
 
   const depositCount = await escrow.depositCounter();
-  console.log(`🔢 Total deposits so far: ${depositCount}`);
+  console.log(`🔢 Total deposits so far: ${depositCount} (type: ${typeof depositCount})`);
 
   // Step 1: Re-check cached active deposits
   console.log(`🔄 Step 1: Rechecking ${cachedIds.length} previously active deposits...`);
@@ -64,11 +64,12 @@ async function scanActiveDeposits() {
   const highestCachedId = cachedIds.length > 0 ? Math.max(...cachedIds.map(id => Number(id))) : -1;
   const startScanFrom = highestCachedId + 1;
   
-  console.log(`🔍 Step 2: Scanning NEW deposits from ${startScanFrom} to ${depositCount - 1}...`);
+  console.log(`🔍 Step 2: Scanning NEW deposits from ${startScanFrom} to ${Number(depositCount) - 1}...`);
   
   // Only scan new deposits (from highest cached ID + 1 to current counter)
-  for (let i = startScanFrom; i < depositCount; i += batchSize) {
-    const batch = Array.from({ length: batchSize }, (_, j) => i + j).filter(n => n < depositCount);
+  const numDepositCount = Number(depositCount);
+  for (let i = startScanFrom; i < numDepositCount; i += batchSize) {
+    const batch = Array.from({ length: batchSize }, (_, j) => i + j).filter(n => n < numDepositCount);
     try {
       const result = await escrow.getDepositFromIds(batch);
       for (const deposit of result) {
