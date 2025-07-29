@@ -15,11 +15,11 @@ app.command('/liquidity', async ({ ack, respond, say, command }) => {
     await ack();
     
     console.log('📊 Running liquidity report...');
-    const message = await runLiquidityReport();
+    const report = await runLiquidityReport();
     
     console.log('✅ Sending response to Slack');
     // Post to the channel where the command was used
-    await say(`🔄 *USDC Totals by Verifier:*\n\n${message}`);
+    await say(report);
     
   } catch (error) {
     console.error('❌ Error:', error);

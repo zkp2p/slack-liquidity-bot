@@ -13,12 +13,13 @@ async function sendHourlyReport() {
     console.log('🕐 Running hourly liquidity report...');
     
     // Run the liquidity report
-    const message = await runLiquidityReport();
+    const report = await runLiquidityReport();
     
-    // Send to Slack channel
+    // Send to Slack channel with blocks
     await slack.chat.postMessage({
       channel: CHANNEL_ID,
-      text: `🕐 *Hourly Liquidity Report*\n\n${message}`,
+      text: 'Hourly Liquidity Report', // Fallback text
+      blocks: report.blocks,
       unfurl_links: false
     });
     

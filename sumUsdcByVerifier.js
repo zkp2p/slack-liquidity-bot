@@ -103,24 +103,50 @@ function formatLiquidity(verifierTotals) {
     })
     .sort((a, b) => parseFloat(b.formatted) - parseFloat(a.formatted));
 
-  // Create table header
-  let table = '```\n';
-  table += '┌─────────────────┬─────────────────┐\n';
-  table += '│ Platform        │ USDC Amount     │\n';
-  table += '├─────────────────┼─────────────────┤\n';
+  // Create Slack blocks
+  const blocks = [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "*Platform*    *USDC Amount*"
+      }
+    },
+    {
+      "type": "divider"
+    }
+  ];
 
-  // Add rows
+  // Add platform rows
   sortedEntries.forEach(entry => {
-    const platform = entry.name.padEnd(15);
-    const amount = parseFloat(entry.formatted).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).padStart(15);
-    table += `│ ${platform} │ ${amount} │\n`;
+    const amount = parseFloat(entry.formatted).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    blocks.push({
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": `${entry.name}    ${amount}`
+      }
+    });
   });
 
-  table += '└─────────────────┴─────────────────┘\n';
-  table += '```\n\n';
-  table += '_*Liquidity for multiple platforms can be counted twice_';
+  // Add footer
+  blocks.push(
+    {
+      "type": "divider"
+    },
+    {
+      "type": "context",
+      "elements": [
+        {
+          "type": "mrkdwn",
+          "text": "_*Liquidity for multiple platforms can be counted twice_"
+        }
+      ]
+    }
+  );
 
-  return table;
+  return { blocks };
 }
 
 async function runLiquidityReport() {
