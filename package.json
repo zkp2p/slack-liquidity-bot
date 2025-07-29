@@ -1,0 +1,30 @@
+{
+  "name": "liquidity-bot",
+  "version": "1.0.0",
+  "description": "Slack bot for liquidity reporting",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "scheduler": "node scheduler.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "slack",
+    "bot",
+    "liquidity",
+    "blockchain"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "engines": {
+    "node": "18.x"
+  },
+  "dependencies": {
+    "@slack/bolt": "^4.4.0",
+    "@slack/web-api": "^7.9.3",
+    "body-parser": "^2.2.0",
+    "dotenv": "^17.2.1",
+    "ethers": "^6.15.0"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "name": "liquidity-bot",
+  "description": "Slack bot for automated liquidity reporting",
+  "repository": "https://github.com/yourusername/liquidity-bot",
+  "logo": "",
+  "keywords": ["slack", "bot", "liquidity", "blockchain"],
+  "env": {
+    "SLACK_BOT_TOKEN": {
+      "description": "Your Slack Bot User OAuth Token",
+      "required": true
+    },
+    "SLACK_SIGNING_SECRET": {
+      "description": "Your Slack App Signing Secret",
+      "required": true
+    },
+    "SLACK_CLIENT_ID": {
+      "description": "Your Slack App Client ID",
+      "required": true
+    },
+    "SLACK_CLIENT_SECRET": {
+      "description": "Your Slack App Client Secret",
+      "required": true
+    },
+    "SLACK_CHANNEL_ID": {
+      "description": "Slack Channel ID where reports will be sent",
+      "required": true
+    },
+    "BASE_RPC_URL": {
+      "description": "Base RPC URL for blockchain calls",
+      "required": true
+    }
+  },
+  "addons": [
+    {
+      "plan": "scheduler:standard"
+    }
+  ],
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  }
+} 
