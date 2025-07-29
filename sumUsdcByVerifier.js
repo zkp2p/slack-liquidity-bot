@@ -103,42 +103,19 @@ function formatLiquidity(verifierTotals) {
     })
     .sort((a, b) => parseFloat(b.formatted) - parseFloat(a.formatted));
 
-  // Create Slack blocks with header
-  const blocks = [
-    {
-      "type": "section",
-      "fields": [
-        {
-          "type": "mrkdwn",
-          "text": "*Platform*"
-        },
-        {
-          "type": "mrkdwn",
-          "text": "*USDC Amount*"
-        }
-      ]
-    },
-    {
-      "type": "divider"
-    }
-  ];
+  // Create Slack blocks
+  const blocks = [];
 
-  // Add platform rows with fields
+  // Add platform sections
   sortedEntries.forEach(entry => {
     const amount = parseFloat(entry.formatted).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     
     blocks.push({
       "type": "section",
-      "fields": [
-        {
-          "type": "mrkdwn",
-          "text": entry.name
-        },
-        {
-          "type": "mrkdwn",
-          "text": amount
-        }
-      ]
+      "text": {
+        "type": "mrkdwn",
+        "text": `*${entry.name}*: ${amount}`
+      }
     });
   });
 
