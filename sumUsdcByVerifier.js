@@ -43,8 +43,8 @@ async function scanActiveDeposits() {
   const depositCount = await escrow.depositCounter();
   console.log(`🔢 Total deposits so far: ${depositCount}`);
 
-  // Re-check cached active deposits
-  console.log(`🔄 Rechecking ${cachedIds.length} previously active deposits...`);
+  // Step 1: Re-check cached active deposits
+  console.log(`🔄 Step 1: Rechecking ${cachedIds.length} previously active deposits...`);
   for (const id of cachedIds) {
     try {
       const [deposit] = await escrow.getDepositFromIds([id]);
@@ -59,9 +59,14 @@ async function scanActiveDeposits() {
     }
   }
 
-  // Scan from 0 to depositCounter - 1
-  console.log(`🔍 Scanning deposits from 0 to ${depositCount}...`);
-  for (let i = 0; i < depositCount; i += batchSize) {
+  // Step 2: Find the highest cached ID to start scanning from
+  const highestCachedId = cachedIds.length > 0 ? Math.max(...cachedIds) : -1;
+  const startScanFrom = highestCachedId + 1;
+  
+  console.log(`🔍 Step 2: Scanning NEW deposits from ${startScanFrom} to ${depositCount - 1}...`);
+  
+  // Only scan new deposits (from highest cached ID + 1 to current counter)
+  for (let i = startScanFrom; i < depositCount; i += batchSize) {
     const batch = Array.from({ length: batchSize }, (_, j) => i + j).filter(n => n < depositCount);
     try {
       const result = await escrow.getDepositFromIds(batch);
@@ -69,10 +74,8 @@ async function scanActiveDeposits() {
         const id = deposit.depositId;
         const accepting = deposit.deposit.acceptingIntents;
         if (accepting) {
-          if (!activeDepositIds.has(id)) {
-            console.log(`🆕 Deposit ${id} is ACTIVE`);
-          }
           activeDepositIds.add(id);
+          console.log(`🆕 Deposit ${id} is ACTIVE (NEW)`);
         }
       }
     } catch (err) {
@@ -119,10 +122,14 @@ function formatLiquidity(verifierTotals) {
 }
 
 async function runLiquidityReport() {
-  // Use cached active deposits instead of re-scanning
-  const depositIds = loadCachedIds();
+  // Step 1: Scan deposits and cache them
+  console.log('🔍 Step 1: Scanning deposits...');
+  const depositIds = await scanActiveDeposits();
   
-  console.log('📊 Generating liquidity report...');
+  // Step 2: Sum USDC from cached data
+  console.log('💰 Step 2: Summing USDC...');
+  
+  console.log('📊 Step 3: Generating liquidity report...');
   const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
   const escrow = new ethers.Contract(ESCROW_ADDRESS, ABI, provider);
   const verifierTotals = {};
@@ -140,6 +147,7 @@ async function runLiquidityReport() {
     }
   }
 
+  console.log('📤 Step 4: Report ready to send');
   return formatLiquidity(verifierTotals);
 }
 
