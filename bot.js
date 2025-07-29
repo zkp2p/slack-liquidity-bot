@@ -9,7 +9,7 @@ const app = new App({
 });
 
 // Handle /liquidity command
-app.command('/liquidity', async ({ ack, respond }) => {
+app.command('/liquidity', async ({ ack, respond, say, command }) => {
   try {
     console.log('🔄 Received /liquidity command');
     await ack();
@@ -18,7 +18,8 @@ app.command('/liquidity', async ({ ack, respond }) => {
     const message = await runLiquidityReport();
     
     console.log('✅ Sending response to Slack');
-    await respond(`🔄 *USDC Totals by Verifier:*\n\n${message}`);
+    // Post to the channel where the command was used
+    await say(`🔄 *USDC Totals by Verifier:*\n\n${message}`);
     
   } catch (error) {
     console.error('❌ Error:', error);
@@ -33,7 +34,8 @@ app.error((error) => {
 
 // Start the bot
 (async () => {
-  await app.start(process.env.PORT || 3000);
-  console.log('🚀 Bot is running on port', process.env.PORT || 3000);
-  console.log('🔗 Webhook URL: http://localhost:3000/slack/events');
+  const port = process.env.PORT || 3000;
+  await app.start(port);
+  console.log('🚀 Bot is running on port', port);
+  console.log('🔗 Webhook URL: https://zkp2p-liquidity-bot-c365013bc1a9.herokuapp.com/slack/events');
 })();
