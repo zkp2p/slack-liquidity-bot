@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node bot.js",
     "scheduler": "node scheduler.js",
+    "scan": "node -e \"require('./sumUsdcByVerifier').scanActiveDeposits()\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

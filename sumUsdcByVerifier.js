@@ -5,6 +5,7 @@ const { ethers } = require('ethers');
 const ESCROW_ADDRESS = '0xCA38607D85E8F6294Dc10728669605E6664C2D70';
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const ABI = require('./escrowAbi.json');
+const ACTIVE_CACHE_FILE = 'activeDeposits.json';
 
 const verifierMapping = {
   '0x76d33a33068d86016b806df02376ddbb23dd3703': { platform: 'Cash App', isUsdOnly: true },
@@ -16,6 +17,75 @@ const verifierMapping = {
   '0xf2ac5be14f32cbe6a613cff8931d95460d6c33a3': { platform: 'Mercado Pago', isUsdOnly: false },
   '0x431a078a5029146aab239c768a615cd484519af7': { platform: 'Zelle', isUsdOnly: true }
 };
+
+function loadCachedIds() {
+  try {
+    return JSON.parse(fs.readFileSync(ACTIVE_CACHE_FILE));
+  } catch {
+    return [];
+  }
+}
+
+function saveCachedIds(ids) {
+  fs.writeFileSync(ACTIVE_CACHE_FILE, JSON.stringify(ids, null, 2));
+}
+
+async function scanActiveDeposits() {
+  console.log('🔄 Scanning for active deposits...');
+  
+  const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
+  const escrow = new ethers.Contract(ESCROW_ADDRESS, ABI, provider);
+  
+  let batchSize = 10;
+  const activeDepositIds = new Set();
+  const cachedIds = loadCachedIds();
+
+  const depositCount = await escrow.depositCounter();
+  console.log(`🔢 Total deposits so far: ${depositCount}`);
+
+  // Re-check cached active deposits
+  console.log(`🔄 Rechecking ${cachedIds.length} previously active deposits...`);
+  for (const id of cachedIds) {
+    try {
+      const [deposit] = await escrow.getDepositFromIds([id]);
+      if (deposit.deposit.acceptingIntents) {
+        activeDepositIds.add(id);
+        console.log(`✅ Deposit ${id} still ACTIVE`);
+      } else {
+        console.log(`❌ Deposit ${id} now INACTIVE`);
+      }
+    } catch {
+      console.log(`⚠️ Failed to fetch deposit ${id}`);
+    }
+  }
+
+  // Scan from 0 to depositCounter - 1
+  console.log(`🔍 Scanning deposits from 0 to ${depositCount}...`);
+  for (let i = 0; i < depositCount; i += batchSize) {
+    const batch = Array.from({ length: batchSize }, (_, j) => i + j).filter(n => n < depositCount);
+    try {
+      const result = await escrow.getDepositFromIds(batch);
+      for (const deposit of result) {
+        const id = deposit.depositId;
+        const accepting = deposit.deposit.acceptingIntents;
+        if (accepting) {
+          if (!activeDepositIds.has(id)) {
+            console.log(`🆕 Deposit ${id} is ACTIVE`);
+          }
+          activeDepositIds.add(id);
+        }
+      }
+    } catch (err) {
+      console.error(`❌ Error fetching batch starting at ${i}:`, err.message);
+    }
+  }
+
+  const finalIds = Array.from(activeDepositIds).map(id => Number(id)).sort((a, b) => a - b);
+  saveCachedIds(finalIds);
+  console.log(`✅ Cached ${finalIds.length} active deposit IDs.`);
+  
+  return finalIds;
+}
 
 function formatLiquidity(verifierTotals) {
   // Convert to array and sort by amount (descending)
@@ -49,7 +119,10 @@ function formatLiquidity(verifierTotals) {
 }
 
 async function runLiquidityReport() {
-  const depositIds = JSON.parse(fs.readFileSync('activeDeposits.json'));
+  // Always scan for active deposits first
+  const depositIds = await scanActiveDeposits();
+  
+  console.log('📊 Generating liquidity report...');
   const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
   const escrow = new ethers.Contract(ESCROW_ADDRESS, ABI, provider);
   const verifierTotals = {};
@@ -70,4 +143,4 @@ async function runLiquidityReport() {
   return formatLiquidity(verifierTotals);
 }
 
-module.exports = { runLiquidityReport };
+module.exports = { runLiquidityReport, scanActiveDeposits };
