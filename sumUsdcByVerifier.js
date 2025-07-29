@@ -119,8 +119,8 @@ function formatLiquidity(verifierTotals) {
 }
 
 async function runLiquidityReport() {
-  // Always scan for active deposits first
-  const depositIds = await scanActiveDeposits();
+  // Use cached active deposits instead of re-scanning
+  const depositIds = loadCachedIds();
   
   console.log('📊 Generating liquidity report...');
   const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
