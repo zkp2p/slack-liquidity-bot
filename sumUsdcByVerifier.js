@@ -2,11 +2,27 @@
 const fs = require('fs');
 const { ethers } = require('ethers');
 
-const ESCROW_ADDRESS = '0xCA38607D85E8F6294Dc10728669605E6664C2D70';
+const ESCROW_ADDRESS = '0x2f121CDDCA6d652f35e8B3E560f9760898888888';
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const ABI = require('./escrowAbi.json');
+const REGISTRY_ABI = require('./registryAbi.json');
 const ACTIVE_CACHE_FILE = 'activeDeposits.json';
 
+// Payment method ID (bytes32) to platform mapping
+const paymentMethodToPlatform = {
+  '0x90262a3db0edd0be2369c6b28f9e8511ec0bac7136cefbada0880602f87e7268': 'Venmo',
+  '0x617f88ab82b5c1b014c539f7e75121427f0bb50a4c58b187a238531e7d58605d': 'Revolut',
+  '0x10940ee67cfb3c6c064569ec92c0ee934cd7afa18dd2ca2d6a2254fcb009c17d': 'Cash App',
+  '0x554a007c2217df766b977723b276671aee5ebb4adaea0edb6433c88b3e61dac5': 'Wise',
+  '0xa5418819c024239299ea32e09defae8ec412c03e58f5c75f1b2fe84c857f5483': 'Mercado Pago',
+  '0x817260692b75e93c7fbc51c71637d4075a975e221e1ebc1abeddfabd731fd90d': 'Zelle', // zelle-citi
+  '0x6aa1d1401e79ad0549dced8b1b96fb72c41cd02b32a7d9ea1fed54ba9e17152e': 'Zelle', // zelle-chase
+  '0x4bc42b322a3ad413b91b2fde30549ca70d6ee900eded1681de91aaf32ffd7ab5': 'Zelle', // zelle-bofa
+  '0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f': 'PayPal',
+  '0x62c7ed738ad3e7618111348af32691b5767777fbaf46a2d8943237625552645c': 'Monzo'
+};
+
+// Legacy verifier address mapping (kept for backward compatibility if needed)
 const verifierMapping = {
   '0x76d33a33068d86016b806df02376ddbb23dd3703': { platform: 'Cash App', isUsdOnly: true },
   '0x9a733b55a875d0db4915c6b36350b24f8ab99df5': { platform: 'Venmo', isUsdOnly: true },
@@ -36,7 +52,6 @@ async function scanActiveDeposits() {
   const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
   const escrow = new ethers.Contract(ESCROW_ADDRESS, ABI, provider);
   
-  let batchSize = 10;
   const activeDepositIds = new Set();
   const cachedIds = loadCachedIds();
 
@@ -47,20 +62,19 @@ async function scanActiveDeposits() {
   console.log(`🔄 Step 1: Rechecking ${cachedIds.length} previously active deposits...`);
   for (const id of cachedIds) {
     try {
-      const [deposit] = await escrow.getDepositFromIds([id]);
-      if (deposit.deposit.acceptingIntents) {
+      const deposit = await escrow.getDeposit(id);
+      if (deposit.acceptingIntents) {
         activeDepositIds.add(Number(id));
         console.log(`✅ Deposit ${id} still ACTIVE`);
       } else {
         console.log(`❌ Deposit ${id} now INACTIVE`);
       }
-    } catch {
-      console.log(`⚠️ Failed to fetch deposit ${id}`);
+    } catch (err) {
+      console.log(`⚠️ Failed to fetch deposit ${id}:`, err.message);
     }
   }
 
   // Step 2: Find the highest cached ID to start scanning from
-  console.log('🔍 Debug: cachedIds types:', cachedIds.slice(0, 5).map(id => typeof id));
   const highestCachedId = cachedIds.length > 0 ? Math.max(...cachedIds.map(id => Number(id))) : -1;
   const startScanFrom = highestCachedId + 1;
   
@@ -68,20 +82,18 @@ async function scanActiveDeposits() {
   
   // Only scan new deposits (from highest cached ID + 1 to current counter)
   const numDepositCount = Number(depositCount);
-  for (let i = startScanFrom; i < numDepositCount; i += batchSize) {
-    const batch = Array.from({ length: batchSize }, (_, j) => i + j).filter(n => n < numDepositCount);
+  for (let i = startScanFrom; i < numDepositCount; i++) {
     try {
-      const result = await escrow.getDepositFromIds(batch);
-      for (const deposit of result) {
-        const id = deposit.depositId;
-        const accepting = deposit.deposit.acceptingIntents;
-        if (accepting) {
-          activeDepositIds.add(Number(id));
-          console.log(`🆕 Deposit ${id} is ACTIVE (NEW)`);
-        }
+      const deposit = await escrow.getDeposit(i);
+      if (deposit.acceptingIntents) {
+        activeDepositIds.add(i);
+        console.log(`🆕 Deposit ${i} is ACTIVE (NEW)`);
       }
     } catch (err) {
-      console.error(`❌ Error fetching batch starting at ${i}:`, err.message);
+      // Deposit might not exist, skip it
+      if (!err.message.includes('DepositNotFound')) {
+        console.error(`❌ Error fetching deposit ${i}:`, err.message);
+      }
     }
   }
 
@@ -92,14 +104,12 @@ async function scanActiveDeposits() {
   return finalIds;
 }
 
-function formatLiquidity(verifierTotals) {
+function formatLiquidity(platformTotals) {
   // Convert to array and sort by amount (descending)
-  const sortedEntries = Object.entries(verifierTotals)
-    .map(([verifier, amount]) => {
-      const info = verifierMapping[verifier.toLowerCase()];
-      const name = info?.platform || verifier;
+  const sortedEntries = Object.entries(platformTotals)
+    .map(([platform, amount]) => {
       const formatted = parseFloat(ethers.formatUnits(amount, 6)).toFixed(2);
-      return { name, formatted, amount };
+      return { name: platform, formatted, amount };
     })
     .sort((a, b) => parseFloat(b.formatted) - parseFloat(a.formatted));
 
@@ -138,6 +148,17 @@ function formatLiquidity(verifierTotals) {
   return { blocks };
 }
 
+// Helper function to get verifier address from payment method via registry
+async function getVerifierFromPaymentMethod(provider, registryAddress, paymentMethod) {
+  try {
+    const registry = new ethers.Contract(registryAddress, REGISTRY_ABI, provider);
+    return await registry.getVerifier(paymentMethod);
+  } catch (err) {
+    console.warn(`⚠️ Could not get verifier for payment method ${paymentMethod}:`, err.message);
+    return null;
+  }
+}
+
 async function runLiquidityReport() {
   // Step 1: Scan deposits and cache them
   console.log('🔍 Step 1: Scanning deposits...');
@@ -149,23 +170,43 @@ async function runLiquidityReport() {
   console.log('📊 Step 3: Generating liquidity report...');
   const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
   const escrow = new ethers.Contract(ESCROW_ADDRESS, ABI, provider);
-  const verifierTotals = {};
+  
+  const platformTotals = {};
 
-  for (let i = 0; i < depositIds.length; i += 10) {
-    const batch = depositIds.slice(i, i + 10);
-    const results = await escrow.getDepositFromIds(batch);
-    for (const d of results) {
-      if (d.deposit.token.toLowerCase() !== USDC_ADDRESS.toLowerCase()) continue;
-      for (const v of d.verifiers) {
-        const addr = v.verifier.toLowerCase();
-        const amt = BigInt(d.deposit.remainingDeposits);
-        verifierTotals[addr] = (verifierTotals[addr] || 0n) + amt;
+  // Process each deposit
+  for (const depositId of depositIds) {
+    try {
+      const deposit = await escrow.getDeposit(depositId);
+      
+      // Only process USDC deposits
+      if (deposit.token.toLowerCase() !== USDC_ADDRESS.toLowerCase()) {
+        continue;
       }
+      
+      // Get payment methods for this deposit
+      const paymentMethods = await escrow.getDepositPaymentMethods(depositId);
+      
+      // Sum liquidity by platform (combining Zelle variants)
+      const remainingDeposits = BigInt(deposit.remainingDeposits);
+      
+      for (const paymentMethod of paymentMethods) {
+        // Normalize payment method to lowercase for comparison
+        const pmLower = paymentMethod.toLowerCase();
+        const platform = paymentMethodToPlatform[pmLower];
+        
+        if (platform) {
+          platformTotals[platform] = (platformTotals[platform] || 0n) + remainingDeposits;
+        } else {
+          console.warn(`⚠️ Unknown payment method: ${paymentMethod}`);
+        }
+      }
+    } catch (err) {
+      console.error(`❌ Error processing deposit ${depositId}:`, err.message);
     }
   }
 
   console.log('📤 Step 4: Report ready to send');
-  return formatLiquidity(verifierTotals);
+  return formatLiquidity(platformTotals);
 }
 
 module.exports = { runLiquidityReport, scanActiveDeposits };

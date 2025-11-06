@@ -2,7 +2,7 @@ const fs = require('fs');
 const { ethers } = require('ethers');
 require('dotenv').config();
 
-const ESCROW_ADDRESS = '0xCA38607D85E8F6294Dc10728669605E6664C2D70';
+const ESCROW_ADDRESS = '0x2f121CDDCA6d652f35e8B3E560f9760898888888';
 const ABI = require('./escrowAbi.json');
 
 const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
@@ -23,7 +23,6 @@ function saveCachedIds(ids) {
 }
 
 async function scanDeposits() {
-  let batchSize = 10;
   const activeDepositIds = new Set();
   const cachedIds = loadCachedIds();
 
@@ -34,36 +33,35 @@ async function scanDeposits() {
   console.log(`🔄 Rechecking ${cachedIds.length} previously active deposits...`);
   for (const id of cachedIds) {
     try {
-      const [deposit] = await escrow.getDepositFromIds([id]);
-      if (deposit.deposit.acceptingIntents) {
-        activeDepositIds.add(id);
+      const deposit = await escrow.getDeposit(id);
+      if (deposit.acceptingIntents) {
+        activeDepositIds.add(Number(id));
         console.log(`✅ Deposit ${id} still ACTIVE`);
       } else {
         console.log(`❌ Deposit ${id} now INACTIVE`);
       }
-    } catch {
-      console.log(`⚠️ Failed to fetch deposit ${id}`);
+    } catch (err) {
+      console.log(`⚠️ Failed to fetch deposit ${id}:`, err.message);
     }
   }
 
   // Scan from 0 to depositCounter - 1
   console.log(`🔍 Scanning deposits from 0 to ${depositCount}...`);
-  for (let i = 0; i < depositCount; i += batchSize) {
-    const batch = Array.from({ length: batchSize }, (_, j) => i + j).filter(n => n < depositCount);
+  const numDepositCount = Number(depositCount);
+  for (let i = 0; i < numDepositCount; i++) {
     try {
-      const result = await escrow.getDepositFromIds(batch);
-      for (const deposit of result) {
-        const id = deposit.depositId;
-        const accepting = deposit.deposit.acceptingIntents;
-        if (accepting) {
-          if (!activeDepositIds.has(id)) {
-            console.log(`🆕 Deposit ${id} is ACTIVE`);
-          }
-          activeDepositIds.add(id);
+      const deposit = await escrow.getDeposit(i);
+      if (deposit.acceptingIntents) {
+        if (!activeDepositIds.has(i)) {
+          console.log(`🆕 Deposit ${i} is ACTIVE`);
         }
+        activeDepositIds.add(i);
       }
     } catch (err) {
-      console.error(`❌ Error fetching batch starting at ${i}:`, err.message);
+      // Deposit might not exist, skip it
+      if (!err.message.includes('DepositNotFound')) {
+        console.error(`❌ Error fetching deposit ${i}:`, err.message);
+      }
     }
   }
 
