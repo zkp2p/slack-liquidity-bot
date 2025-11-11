@@ -164,7 +164,6 @@ async function runLiquidityReport() {
       
       // Sum liquidity by platform (combining Zelle variants) without double-counting
       const remainingDeposits = BigInt(deposit.remainingDeposits);
-      const depositPlatforms = new Set();
       
       for (const paymentMethod of paymentMethods) {
         // Normalize payment method to lowercase for comparison
@@ -172,10 +171,6 @@ async function runLiquidityReport() {
         const platform = paymentMethodToPlatform[pmLower];
         
         if (platform) {
-          if (depositPlatforms.has(platform)) {
-            continue;
-          }
-          depositPlatforms.add(platform);
           platformTotals[platform] = (platformTotals[platform] || 0n) + remainingDeposits;
         } else {
           console.warn(`⚠️ Unknown payment method: ${paymentMethod}`);
