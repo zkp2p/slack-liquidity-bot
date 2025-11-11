@@ -6,6 +6,7 @@ const ESCROW_ADDRESS = '0x2f121CDDCA6d652f35e8B3E560f9760898888888';
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const ABI = require('./escrowAbi.json');
 const ACTIVE_CACHE_FILE = 'activeDeposits.json';
+const RATE_LIMIT_DELAY_MS = Number(process.env.RATE_LIMIT_DELAY_MS || 200);
 
 // Payment method ID (bytes32) to platform mapping
 const paymentMethodToPlatform = {
@@ -20,6 +21,10 @@ const paymentMethodToPlatform = {
   '0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f': 'PayPal',
   '0x62c7ed738ad3e7618111348af32691b5767777fbaf46a2d8943237625552645c': 'Monzo'
 };
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 function loadCachedIds() {
   try {
@@ -50,6 +55,7 @@ async function scanActiveDeposits() {
   for (const id of cachedIds) {
     try {
       const deposit = await escrow.getDeposit(id);
+      await delay(RATE_LIMIT_DELAY_MS);
       if (deposit.acceptingIntents) {
         activeDepositIds.add(Number(id));
         console.log(`✅ Deposit ${id} still ACTIVE`);
@@ -72,6 +78,7 @@ async function scanActiveDeposits() {
   for (let i = startScanFrom; i < numDepositCount; i++) {
     try {
       const deposit = await escrow.getDeposit(i);
+      await delay(RATE_LIMIT_DELAY_MS);
       if (deposit.acceptingIntents) {
         activeDepositIds.add(i);
         console.log(`🆕 Deposit ${i} is ACTIVE (NEW)`);
@@ -153,6 +160,7 @@ async function runLiquidityReport() {
   for (const depositId of depositIds) {
     try {
       const deposit = await escrow.getDeposit(depositId);
+      await delay(RATE_LIMIT_DELAY_MS);
       
       // Only process USDC deposits
       if (deposit.token.toLowerCase() !== USDC_ADDRESS.toLowerCase()) {
@@ -161,6 +169,7 @@ async function runLiquidityReport() {
       
       // Get payment methods for this deposit
       const paymentMethods = await escrow.getDepositPaymentMethods(depositId);
+      await delay(RATE_LIMIT_DELAY_MS);
       
       // Sum liquidity by platform (combining Zelle variants) without double-counting
       const remainingDeposits = BigInt(deposit.remainingDeposits);
