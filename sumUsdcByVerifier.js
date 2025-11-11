@@ -5,7 +5,6 @@ const { ethers } = require('ethers');
 const ESCROW_ADDRESS = '0x2f121CDDCA6d652f35e8B3E560f9760898888888';
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const ABI = require('./escrowAbi.json');
-const REGISTRY_ABI = require('./registryAbi.json');
 const ACTIVE_CACHE_FILE = 'activeDeposits.json';
 
 // Payment method ID (bytes32) to platform mapping
@@ -20,18 +19,6 @@ const paymentMethodToPlatform = {
   '0x4bc42b322a3ad413b91b2fde30549ca70d6ee900eded1681de91aaf32ffd7ab5': 'Zelle', // zelle-bofa
   '0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f': 'PayPal',
   '0x62c7ed738ad3e7618111348af32691b5767777fbaf46a2d8943237625552645c': 'Monzo'
-};
-
-// Legacy verifier address mapping (kept for backward compatibility if needed)
-const verifierMapping = {
-  '0x76d33a33068d86016b806df02376ddbb23dd3703': { platform: 'Cash App', isUsdOnly: true },
-  '0x9a733b55a875d0db4915c6b36350b24f8ab99df5': { platform: 'Venmo', isUsdOnly: true },
-  '0xaa5a1b62b01781e789c900d616300717cd9a41ab': { platform: 'Revolut', isUsdOnly: false },
-  '0xff0149799631d7a5bde2e7ea9b306c42b3d9a9ca': { platform: 'Wise', isUsdOnly: false },
-  '0x03d17e9371c858072e171276979f6b44571c5dea': { platform: 'PayPal', isUsdOnly: false },
-  '0x0de46433bd251027f73ed8f28e01ef05da36a2e0': { platform: 'Monzo', isUsdOnly: false },
-  '0xf2ac5be14f32cbe6a613cff8931d95460d6c33a3': { platform: 'Mercado Pago', isUsdOnly: false },
-  '0x431a078a5029146aab239c768a615cd484519af7': { platform: 'Zelle', isUsdOnly: true }
 };
 
 function loadCachedIds() {
@@ -148,17 +135,6 @@ function formatLiquidity(platformTotals) {
   return { blocks };
 }
 
-// Helper function to get verifier address from payment method via registry
-async function getVerifierFromPaymentMethod(provider, registryAddress, paymentMethod) {
-  try {
-    const registry = new ethers.Contract(registryAddress, REGISTRY_ABI, provider);
-    return await registry.getVerifier(paymentMethod);
-  } catch (err) {
-    console.warn(`⚠️ Could not get verifier for payment method ${paymentMethod}:`, err.message);
-    return null;
-  }
-}
-
 async function runLiquidityReport() {
   // Step 1: Scan deposits and cache them
   console.log('🔍 Step 1: Scanning deposits...');
@@ -186,8 +162,9 @@ async function runLiquidityReport() {
       // Get payment methods for this deposit
       const paymentMethods = await escrow.getDepositPaymentMethods(depositId);
       
-      // Sum liquidity by platform (combining Zelle variants)
+      // Sum liquidity by platform (combining Zelle variants) without double-counting
       const remainingDeposits = BigInt(deposit.remainingDeposits);
+      const depositPlatforms = new Set();
       
       for (const paymentMethod of paymentMethods) {
         // Normalize payment method to lowercase for comparison
@@ -195,6 +172,10 @@ async function runLiquidityReport() {
         const platform = paymentMethodToPlatform[pmLower];
         
         if (platform) {
+          if (depositPlatforms.has(platform)) {
+            continue;
+          }
+          depositPlatforms.add(platform);
           platformTotals[platform] = (platformTotals[platform] || 0n) + remainingDeposits;
         } else {
           console.warn(`⚠️ Unknown payment method: ${paymentMethod}`);
