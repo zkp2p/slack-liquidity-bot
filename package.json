@@ -1,16 +1,17 @@
 {
   "name": "liquidity-bot",
   "version": "1.0.0",
-  "description": "Slack bot for liquidity reporting",
+  "description": "Slack and Discord bot for liquidity reporting",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js",
     "scheduler": "node scheduler.js",
     "scan": "node -e \"require('./sumUsdcByVerifier').scanActiveDeposits()\"",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test.js"
   },
   "keywords": [
     "slack",
+    "discord",
     "bot",
     "liquidity",
     "blockchain"
