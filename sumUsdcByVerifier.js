@@ -9,8 +9,8 @@ const ACTIVE_CACHE_FILE = 'activeDeposits.json';
 const DEPOSIT_DATA_CACHE_FILE = 'depositDataCache.json';
 
 // Configuration
-const RATE_LIMIT_DELAY_MS = Number(process.env.RATE_LIMIT_DELAY_MS || 200);
-const BATCH_SIZE = 5; // Concurrent requests per batch
+const RATE_LIMIT_DELAY_MS = Number(process.env.RATE_LIMIT_DELAY_MS || 300);
+const BATCH_SIZE = 3; // Concurrent requests per batch (conservative for rate limits)
 const CACHE_TTL_MS = 4 * 60 * 1000; // 4 minute TTL (slightly less than 5 min scheduler)
 
 // Payment method ID (bytes32) to platform mapping
