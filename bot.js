@@ -37,5 +37,5 @@ app.error((error) => {
   const port = process.env.PORT || 3000;
   await app.start(port);
   console.log('🚀 Bot is running on port', port);
-  console.log('🔗 Webhook URL: https://zkp2p-liquidity-bot-c365013bc1a9.herokuapp.com/slack/events');
+  console.log(`🔗 Webhook URL: https://slack-command-handler-production.up.railway.app/slack/events`);
 })();

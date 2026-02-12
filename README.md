@@ -90,7 +90,7 @@ A Slack bot that provides automated liquidity reporting for blockchain deposits.
 - **bot.js**: Main Slack bot with slash command handling
 - **scheduler.js**: Automated hourly reporting
 - **sumUsdcByVerifier.js**: Blockchain data processing
-- **activeDeposits.json**: Cached deposit IDs
+- **data/depositDataCache.json**: Cached deposit data (5 min TTL)
 
 ## Monitoring
 

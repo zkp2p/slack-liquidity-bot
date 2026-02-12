@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const { ethers } = require('ethers');
 require('dotenv').config();
 
@@ -8,7 +9,12 @@ const ABI = require('./escrowAbi.json');
 const provider = new ethers.JsonRpcProvider(process.env.BASE_RPC_URL);
 const escrow = new ethers.Contract(ESCROW_ADDRESS, ABI, provider);
 
-const ACTIVE_CACHE_FILE = 'activeDeposits.json';
+const DATA_DIR = path.join(__dirname, 'data');
+const ACTIVE_CACHE_FILE = path.join(DATA_DIR, 'activeDeposits.json');
+
+function ensureDataDir() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
 
 function loadCachedIds() {
   try {
@@ -19,6 +25,7 @@ function loadCachedIds() {
 }
 
 function saveCachedIds(ids) {
+  ensureDataDir();
   fs.writeFileSync(ACTIVE_CACHE_FILE, JSON.stringify(ids, null, 2));
 }
 

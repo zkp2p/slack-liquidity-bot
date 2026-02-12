@@ -1,17 +1,18 @@
 // sumUsdcByVerifier.js - Optimized for minimal RPC calls
 const fs = require('fs');
+const path = require('path');
 const { ethers } = require('ethers');
 
 const ESCROW_ADDRESS = '0x2f121CDDCA6d652f35e8B3E560f9760898888888';
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 const ABI = require('./escrowAbi.json');
-const ACTIVE_CACHE_FILE = 'activeDeposits.json';
-const DEPOSIT_DATA_CACHE_FILE = 'depositDataCache.json';
+const DATA_DIR = path.join(__dirname, 'data');
+const DEPOSIT_DATA_CACHE_FILE = path.join(DATA_DIR, 'depositDataCache.json');
 
 // Configuration
 const RATE_LIMIT_DELAY_MS = Number(process.env.RATE_LIMIT_DELAY_MS || 300);
 const BATCH_SIZE = 3; // Concurrent requests per batch (conservative for rate limits)
-const CACHE_TTL_MS = 4 * 60 * 1000; // 4 minute TTL (slightly less than 5 min scheduler)
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minute TTL
 
 // Payment method ID (bytes32) to platform mapping
 const paymentMethodToPlatform = {
@@ -57,17 +58,8 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Load/save active deposit IDs
-function loadCachedIds() {
-  try {
-    return JSON.parse(fs.readFileSync(ACTIVE_CACHE_FILE));
-  } catch {
-    return [];
-  }
-}
-
-function saveCachedIds(ids) {
-  fs.writeFileSync(ACTIVE_CACHE_FILE, JSON.stringify(ids, null, 2));
+function ensureDataDir() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
 // Load/save deposit data cache (persists across restarts)
@@ -87,7 +79,18 @@ function loadDepositDataCache() {
   }
 }
 
+function pruneExpiredDepositDataCache() {
+  const now = Date.now();
+  for (const [id, entry] of Object.entries(memoryCache.deposits)) {
+    if (!entry || typeof entry.timestamp !== 'number' || now - entry.timestamp >= CACHE_TTL_MS) {
+      delete memoryCache.deposits[id];
+    }
+  }
+}
+
 function saveDepositDataCache() {
+  ensureDataDir();
+  pruneExpiredDepositDataCache();
   fs.writeFileSync(DEPOSIT_DATA_CACHE_FILE, JSON.stringify(memoryCache.deposits, null, 2));
 }
 
@@ -158,31 +161,18 @@ async function scanActiveDeposits() {
   loadDepositDataCache();
 
   const escrow = getEscrow();
-  const cachedIds = loadCachedIds();
 
   // Get deposit count (1 RPC call)
   const depositCount = await escrow.depositCounter();
   const numDepositCount = Number(depositCount);
   console.log(`🔢 Total deposits: ${numDepositCount}`);
 
-  // Determine which deposits need fetching
-  const highestCachedId = cachedIds.length > 0 ? Math.max(...cachedIds) : -1;
-  const newDepositIds = [];
-  for (let i = highestCachedId + 1; i < numDepositCount; i++) {
-    newDepositIds.push(i);
-  }
-
-  // Deposits to check: cached ones (might have changed) + new ones
-  const depositsToCheck = [...cachedIds, ...newDepositIds];
-
-  // Separate into cached vs needs-fetch
   const needsFetch = [];
   const fromCacheResults = [];
 
-  for (const id of depositsToCheck) {
+  for (let id = 0; id < numDepositCount; id++) {
     const cached = getCachedDeposit(id);
-    if (cached && cachedIds.includes(id)) {
-      // Use cache for existing deposits within TTL
+    if (cached) {
       fromCacheResults.push({ id, ...cached, fromCache: true });
     } else {
       needsFetch.push(id);
@@ -202,13 +192,12 @@ async function scanActiveDeposits() {
 
   // Filter to active deposits only
   const activeDeposits = allResults.filter(d => d.acceptingIntents);
-  const activeIds = activeDeposits.map(d => d.id).sort((a, b) => a - b);
 
   // Save caches
-  saveCachedIds(activeIds);
   saveDepositDataCache();
 
-  console.log(`✅ Found ${activeDeposits.length} active deposits (${fromCacheResults.filter(d => d.acceptingIntents).length} from cache)`);
+  const activeFromCache = activeDeposits.filter(d => d.fromCache).length;
+  console.log(`✅ Found ${activeDeposits.length} active deposits (${activeFromCache} from cache)`);
 
   return activeDeposits;
 }
