@@ -62,3 +62,4 @@ ehthumbs.db
 Thumbs.db
 activeDeposits.json
 depositDataCache.json
+.superset/

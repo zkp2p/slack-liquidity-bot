@@ -75,6 +75,19 @@ A Slack bot that provides automated liquidity reporting for blockchain deposits.
 | `SLACK_CLIENT_SECRET` | App Client Secret | Yes |
 | `SLACK_CHANNEL_ID` | Channel for reports | Yes |
 | `BASE_RPC_URL` | Base network RPC URL | Yes |
+| `LOG_LEVEL` | Pino log level (`debug`, `info`, `warn`, `error`) | No |
+| `SERVICE_NAME` | Service name included in structured logs | No |
+| `BETTERSTACK_SOURCE_TOKEN` | Better Stack source token for direct ingestion | No |
+| `BETTERSTACK_ENDPOINT` | Better Stack ingest endpoint (default `https://in.logs.betterstack.com`) | No |
+
+## Structured Log Schema
+
+All runtime logs are JSON and include these normalized fields for Better Stack queries:
+
+- `timestamp`, `level`, `service`, `env`, `schema_version`
+- `component`, `action`, `success`, `upstream`
+- optional correlation keys: `request_id`, `job_id`
+- optional diagnostics: `duration_ms`, `status_code`, `error_message`, `error_stack`, `error_name`
 
 ## Usage
 
