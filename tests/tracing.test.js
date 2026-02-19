@@ -125,9 +125,8 @@ test('buildTracingConfig composes endpoint, headers, and batching defaults', () 
     SERVICE_NAME: 'svc-a',
     NODE_ENV: 'production',
     BETTERSTACK_SOURCE_TOKEN: 'token-123',
-    BETTERSTACK_OTLP_ENDPOINT: 'https://otel.example.com',
-    BETTERSTACK_OTLP_HEADERS: 'x-team=infra',
-    OTEL_EXPORTER_OTLP_HEADERS: 'authorization=Bearer old',
+    BETTERSTACK_ENDPOINT: 'https://otel.example.com',
+    OTEL_EXPORTER_OTLP_HEADERS: 'authorization=Bearer old,x-team=infra',
     OTEL_TRACES_SAMPLE_RATIO: '0.4',
     OTEL_BSP_MAX_QUEUE_SIZE: '1000',
     OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '2000',
@@ -172,7 +171,7 @@ test('buildTracingConfig adds authorization header when token exists and auth he
 
   assert.equal(config.headers.authorization, 'Bearer source-token');
   assert.equal(config.headers['x-source-token'], 'source-token');
-  assert.equal(config.endpoint, 'https://in-otel.logs.betterstack.com/v1/traces');
+  assert.equal(config.endpoint, 'https://in.logs.betterstack.com/v1/traces');
 });
 
 test('toDiagLogLevel maps all supported values', () => {

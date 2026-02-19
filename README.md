@@ -80,12 +80,8 @@ A Slack bot that provides automated liquidity reporting for blockchain deposits.
 | `LOG_LEVEL` | Pino log level (`debug`, `info`, `warn`, `error`) | No |
 | `SERVICE_NAME` | Service name included in structured logs | No |
 | `BETTERSTACK_SOURCE_TOKEN` | Better Stack source token for direct ingestion | No |
-| `BETTERSTACK_ENDPOINT` | Better Stack ingest endpoint (default `https://in.logs.betterstack.com`) | No |
+| `BETTERSTACK_ENDPOINT` | Better Stack ingest endpoint base URL (for logs and traces; traces use `/v1/traces`) | No |
 | `OTEL_TRACING_ENABLED` | Enable tracing bootstrap (`true`/`false`) | No (default `true`) |
-| `BETTERSTACK_OTLP_ENDPOINT` | OTLP endpoint base URL for traces | No |
-| `BETTERSTACK_OTLP_TRACES_ENDPOINT` | OTLP trace endpoint (overrides base endpoint) | No |
-| `BETTERSTACK_OTLP_TOKEN` | Token used for OTLP headers (`authorization`, `x-source-token`) | No |
-| `BETTERSTACK_OTLP_HEADERS` | Extra OTLP headers (`k=v,k2=v2`) | No |
 | `OTEL_EXPORTER_OTLP_HEADERS` | Standard OTLP exporter headers (`k=v,k2=v2`) | No |
 | `OTEL_TRACES_SAMPLE_RATIO` | Parent-based trace sampling ratio (`0.0`-`1.0`) | No (default `0.1`) |
 | `OTEL_BSP_MAX_QUEUE_SIZE` | BatchSpanProcessor queue size | No (default `2048`) |

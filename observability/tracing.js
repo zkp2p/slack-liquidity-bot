@@ -10,7 +10,7 @@ const {
   TraceIdRatioBasedSampler,
 } = require('@opentelemetry/sdk-trace-base');
 
-const DEFAULT_BETTERSTACK_OTLP_TRACES_ENDPOINT = 'https://in-otel.logs.betterstack.com/v1/traces';
+const DEFAULT_BETTERSTACK_ENDPOINT = 'https://in.logs.betterstack.com';
 
 function parseBoolean(value, fallback) {
   if (value === undefined || value === null || value === '') {
@@ -98,18 +98,12 @@ function buildTracingConfig(env = process.env) {
   const exportTimeoutMillis = parseInteger(env.OTEL_BSP_EXPORT_TIMEOUT, 30000, 1);
   const shutdownTimeoutMillis = parseInteger(env.OTEL_SHUTDOWN_TIMEOUT, 5000, 1);
 
-  const token = env.BETTERSTACK_OTLP_TOKEN || env.BETTERSTACK_SOURCE_TOKEN || '';
-  const configuredEndpoint =
-    env.BETTERSTACK_OTLP_TRACES_ENDPOINT ||
-    env.BETTERSTACK_OTLP_ENDPOINT ||
-    env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ||
-    env.OTEL_EXPORTER_OTLP_ENDPOINT ||
-    (token ? DEFAULT_BETTERSTACK_OTLP_TRACES_ENDPOINT : '');
+  const token = env.BETTERSTACK_SOURCE_TOKEN || '';
+  const configuredEndpoint = env.BETTERSTACK_ENDPOINT || (token ? DEFAULT_BETTERSTACK_ENDPOINT : '');
   const endpoint = normalizeOtlpTracesEndpoint(configuredEndpoint);
 
   const headers = {
     ...parseHeaderList(env.OTEL_EXPORTER_OTLP_HEADERS),
-    ...parseHeaderList(env.BETTERSTACK_OTLP_HEADERS),
   };
 
   if (token) {
