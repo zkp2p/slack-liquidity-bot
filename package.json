@@ -4,10 +4,12 @@
   "description": "Slack and Discord bot for liquidity reporting",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js",
-    "scheduler": "node scheduler.js",
-    "scan": "node -e \"require('./sumUsdcByVerifier').scanActiveDeposits()\"",
-    "test": "node test.js"
+    "start": "node --require ./observability/register.js bot.js",
+    "scheduler": "node --require ./observability/register.js scheduler.js",
+    "scan": "node --require ./observability/register.js -e \"require('./sumUsdcByVerifier').scanActiveDeposits()\"",
+    "test": "node --require ./observability/register.js test.js",
+    "test:unit": "node --test tests/**/*.test.js",
+    "coverage": "c8 --reporter=text --reporter=lcov --check-coverage --lines 100 --functions 100 --branches 100 --statements 100 --include \"observability/**/*.js\" node --test tests/**/*.test.js"
   },
   "keywords": [
     "slack",
@@ -20,13 +22,24 @@
   "license": "ISC",
   "type": "commonjs",
   "engines": {
-    "node": "18.x"
+    "node": ">=18.19.0"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.70.0",
+    "@opentelemetry/context-async-hooks": "^2.5.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.212.0",
+    "@opentelemetry/resources": "^2.5.1",
+    "@opentelemetry/sdk-node": "^0.212.0",
+    "@opentelemetry/sdk-trace-base": "^2.5.1",
     "@slack/bolt": "^4.4.0",
     "@slack/web-api": "^7.9.3",
-    "body-parser": "^2.2.0",
     "dotenv": "^17.2.1",
-    "ethers": "^6.15.0"
-  }
+    "ethers": "^6.15.0",
+    "pino": "^10.3.1"
+  },
+  "devDependencies": {
+    "c8": "^10.1.3"
+  },
+  "packageManager": "pnpm@10.28.2+sha512.41872f037ad22f7348e3b1debbaf7e867cfd448f2726d9cf74c08f19507c31d2c8e7a11525b983febc2df640b5438dee6023ebb1f84ed43cc2d654d2bc326264"
 }

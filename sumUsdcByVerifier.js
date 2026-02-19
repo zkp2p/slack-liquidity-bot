@@ -2,6 +2,9 @@
 const fs = require('fs');
 const path = require('path');
 const { ethers } = require('ethers');
+const { createComponentLogger } = require('./logger');
+
+const logger = createComponentLogger('liquidity-report');
 
 const ESCROW_ADDRESS = '0x2f121CDDCA6d652f35e8B3E560f9760898888888';
 const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
@@ -27,7 +30,7 @@ const paymentMethodToPlatform = {
   '0x3ccc3d4d5e769b1f82dc4988485551dc0cd3c7a3926d7d8a4dde91507199490f': 'PayPal',
   '0x62c7ed738ad3e7618111348af32691b5767777fbaf46a2d8943237625552645c': 'Monzo',
   '0xd9ff4fd6b39a3e3dd43c41d05662a5547de4a878bc97a65bcb352ade493cdc6b': 'n26',
-  '0x5908bb0c9b87763ac6171d4104847667e7f02b4c47b574fe890c1f439ed128bb': 'chime'
+  '0x5908bb0c9b87763ac6171d4104847667e7f02b4c47b574fe890c1f439ed128bb': 'chime',
 };
 
 // Singleton provider instance
@@ -48,14 +51,25 @@ function getEscrow() {
   return escrowInstance;
 }
 
+function toCorrelationFields(context = {}) {
+  const fields = {};
+  if (context.requestId) {
+    fields.request_id = context.requestId;
+  }
+  if (context.jobId) {
+    fields.job_id = context.jobId;
+  }
+  return fields;
+}
+
 // In-memory cache with TTL
 const memoryCache = {
   deposits: {},
-  lastFullScan: null
+  lastFullScan: null,
 };
 
 function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function ensureDataDir() {
@@ -118,7 +132,7 @@ async function processBatches(items, processor, batchSize = BATCH_SIZE) {
 }
 
 // Fetch deposit with caching
-async function fetchDeposit(escrow, depositId) {
+async function fetchDeposit(escrow, depositId, correlation) {
   const cached = getCachedDeposit(depositId);
   if (cached) {
     return { id: depositId, ...cached, fromCache: true };
@@ -139,23 +153,42 @@ async function fetchDeposit(escrow, depositId) {
       remainingDeposits: deposit.remainingDeposits.toString(),
       acceptingIntents: deposit.acceptingIntents,
       isUsdc,
-      paymentMethods: paymentMethods.map(pm => pm.toLowerCase()),
-      timestamp: Date.now()
+      paymentMethods: paymentMethods.map((pm) => pm.toLowerCase()),
+      timestamp: Date.now(),
     };
 
     memoryCache.deposits[depositId] = depositData;
     return { id: depositId, ...depositData, fromCache: false };
   } catch (err) {
     if (!err.message.includes('DepositNotFound')) {
-      console.error(`❌ Error fetching deposit ${depositId}:`, err.message);
+      logger.error(
+        {
+          action: 'deposits.fetch.error',
+          upstream: 'base_rpc',
+          deposit_id: depositId,
+          ...correlation,
+          err,
+        },
+        'Error fetching deposit'
+      );
     }
     return null;
   }
 }
 
 // Main optimized scan - single pass, returns full data
-async function scanActiveDeposits() {
-  console.log('🔄 Scanning for active deposits (optimized)...');
+async function scanActiveDeposits(context = {}) {
+  const correlation = toCorrelationFields(context);
+  const scanStartedAt = Date.now();
+
+  logger.info(
+    {
+      action: 'deposits.scan.start',
+      upstream: 'base_rpc',
+      ...correlation,
+    },
+    'Starting active deposit scan'
+  );
 
   // Load any persisted cache
   loadDepositDataCache();
@@ -165,7 +198,15 @@ async function scanActiveDeposits() {
   // Get deposit count (1 RPC call)
   const depositCount = await escrow.depositCounter();
   const numDepositCount = Number(depositCount);
-  console.log(`🔢 Total deposits: ${numDepositCount}`);
+  logger.info(
+    {
+      action: 'deposits.counter.loaded',
+      upstream: 'base_rpc',
+      deposit_count: numDepositCount,
+      ...correlation,
+    },
+    'Loaded deposit count'
+  );
 
   const needsFetch = [];
   const fromCacheResults = [];
@@ -179,25 +220,42 @@ async function scanActiveDeposits() {
     }
   }
 
-  console.log(`📦 Using ${fromCacheResults.length} cached deposits, fetching ${needsFetch.length} deposits`);
+  logger.info(
+    {
+      action: 'deposits.fetch.plan',
+      upstream: 'base_rpc',
+      cached_count: fromCacheResults.length,
+      fetch_count: needsFetch.length,
+      ...correlation,
+    },
+    'Computed deposit fetch plan'
+  );
 
   // Fetch deposits in parallel batches
-  const fetchedResults = await processBatches(
-    needsFetch,
-    async (id) => fetchDeposit(escrow, id)
-  );
+  const fetchedResults = await processBatches(needsFetch, async (id) => fetchDeposit(escrow, id, correlation));
 
   // Combine results
   const allResults = [...fromCacheResults, ...fetchedResults].filter(Boolean);
 
   // Filter to active deposits only
-  const activeDeposits = allResults.filter(d => d.acceptingIntents);
+  const activeDeposits = allResults.filter((d) => d.acceptingIntents);
 
   // Save caches
   saveDepositDataCache();
 
-  const activeFromCache = activeDeposits.filter(d => d.fromCache).length;
-  console.log(`✅ Found ${activeDeposits.length} active deposits (${activeFromCache} from cache)`);
+  const activeFromCache = activeDeposits.filter((d) => d.fromCache).length;
+  logger.info(
+    {
+      action: 'deposits.scan.finish',
+      upstream: 'base_rpc',
+      deposit_count: numDepositCount,
+      active_count: activeDeposits.length,
+      active_cached_count: activeFromCache,
+      duration_ms: Date.now() - scanStartedAt,
+      ...correlation,
+    },
+    'Completed active deposit scan'
+  );
 
   return activeDeposits;
 }
@@ -212,65 +270,107 @@ function formatLiquidity(platformTotals) {
 
   const blocks = [];
 
-  sortedEntries.forEach(entry => {
+  sortedEntries.forEach((entry) => {
     const amount = parseFloat(entry.formatted).toLocaleString('en-US', {
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+      maximumFractionDigits: 2,
     });
 
     blocks.push({
-      "type": "section",
-      "text": {
-        "type": "mrkdwn",
-        "text": `*${entry.name}*: ${amount}`
-      }
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*${entry.name}*: ${amount}`,
+      },
     });
   });
 
   blocks.push(
-    { "type": "divider" },
+    { type: 'divider' },
     {
-      "type": "context",
-      "elements": [{
-        "type": "mrkdwn",
-        "text": "_*Liquidity for multiple platforms can be counted twice_"
-      }]
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: '_*Liquidity for multiple platforms can be counted twice_',
+        },
+      ],
     }
   );
 
   return { blocks };
 }
 
-async function runLiquidityReport() {
-  console.log('📊 Running optimized liquidity report...');
+async function runLiquidityReport(context = {}) {
+  const correlation = toCorrelationFields(context);
+  const reportStartedAt = Date.now();
 
-  // Single pass: scan returns full deposit data with payment methods
-  const activeDeposits = await scanActiveDeposits();
+  logger.info(
+    {
+      action: 'liquidity.report.start',
+      ...correlation,
+    },
+    'Running liquidity report'
+  );
 
-  // Filter to USDC and sum by platform (no additional RPC calls needed!)
-  const platformTotals = {};
-  let usdcCount = 0;
+  try {
+    // Single pass: scan returns full deposit data with payment methods
+    const activeDeposits = await scanActiveDeposits(context);
 
-  for (const deposit of activeDeposits) {
-    if (!deposit.isUsdc) continue;
-    usdcCount++;
+    // Filter to USDC and sum by platform (no additional RPC calls needed!)
+    const platformTotals = {};
+    let usdcCount = 0;
 
-    const remainingDeposits = BigInt(deposit.remainingDeposits);
+    for (const deposit of activeDeposits) {
+      if (!deposit.isUsdc) continue;
+      usdcCount++;
 
-    for (const paymentMethod of deposit.paymentMethods) {
-      const platform = paymentMethodToPlatform[paymentMethod];
-      if (platform) {
-        platformTotals[platform] = (platformTotals[platform] || 0n) + remainingDeposits;
-      } else {
-        console.warn(`⚠️ Unknown payment method: ${paymentMethod}`);
+      const remainingDeposits = BigInt(deposit.remainingDeposits);
+
+      for (const paymentMethod of deposit.paymentMethods) {
+        const platform = paymentMethodToPlatform[paymentMethod];
+        if (platform) {
+          platformTotals[platform] = (platformTotals[platform] || 0n) + remainingDeposits;
+        } else {
+          logger.warn(
+            {
+              action: 'liquidity.payment_method.unknown',
+              upstream: 'base_rpc',
+              payment_method: paymentMethod,
+              ...correlation,
+            },
+            'Unknown payment method'
+          );
+        }
       }
     }
+
+    const report = formatLiquidity(platformTotals);
+
+    logger.info(
+      {
+        action: 'liquidity.report.finish',
+        usdc_deposit_count: usdcCount,
+        platform_count: Object.keys(platformTotals).length,
+        duration_ms: Date.now() - reportStartedAt,
+        ...correlation,
+      },
+      'Liquidity report ready'
+    );
+
+    return report;
+  } catch (err) {
+    logger.error(
+      {
+        action: 'liquidity.report.error',
+        duration_ms: Date.now() - reportStartedAt,
+        ...correlation,
+        err,
+      },
+      'Liquidity report failed'
+    );
+    throw err;
   }
-
-  console.log(`💰 Processed ${usdcCount} USDC deposits`);
-  console.log('📤 Report ready');
-
-  return formatLiquidity(platformTotals);
 }
 
 // Export for backwards compatibility

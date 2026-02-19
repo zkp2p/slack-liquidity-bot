@@ -1,7 +1,11 @@
 const fs = require('fs');
 const path = require('path');
+const { randomUUID } = require('crypto');
 const { ethers } = require('ethers');
 require('dotenv').config();
+const { createComponentLogger, flushLogs } = require('./logger');
+
+const logger = createComponentLogger('deposit-scanner');
 
 const ESCROW_ADDRESS = '0x2f121CDDCA6d652f35e8B3E560f9760898888888';
 const ABI = require('./escrowAbi.json');
@@ -30,51 +34,154 @@ function saveCachedIds(ids) {
 }
 
 async function scanDeposits() {
+  const jobId = randomUUID();
+  const scanStartedAt = Date.now();
   const activeDepositIds = new Set();
   const cachedIds = loadCachedIds();
 
+  logger.info(
+    {
+      action: 'scanner.job.start',
+      job_id: jobId,
+    },
+    'Starting active deposit scanner'
+  );
+
   const depositCount = await escrow.depositCounter();
-  console.log(`🔢 Total deposits so far: ${depositCount}`);
+  logger.info(
+    {
+      action: 'deposits.counter.loaded',
+      upstream: 'base_rpc',
+      job_id: jobId,
+      deposit_count: Number(depositCount),
+    },
+    'Loaded deposit count'
+  );
 
   // Re-check cached active deposits
-  console.log(`🔄 Rechecking ${cachedIds.length} previously active deposits...`);
+  logger.info(
+    {
+      action: 'deposits.cached.recheck.start',
+      upstream: 'base_rpc',
+      job_id: jobId,
+      cached_count: cachedIds.length,
+    },
+    'Rechecking cached active deposits'
+  );
+
   for (const id of cachedIds) {
     try {
       const deposit = await escrow.getDeposit(id);
       if (deposit.acceptingIntents) {
         activeDepositIds.add(Number(id));
-        console.log(`✅ Deposit ${id} still ACTIVE`);
+        logger.info(
+          {
+            action: 'deposits.cached.recheck.active',
+            upstream: 'base_rpc',
+            job_id: jobId,
+            deposit_id: Number(id),
+          },
+          'Cached deposit is still active'
+        );
       } else {
-        console.log(`❌ Deposit ${id} now INACTIVE`);
+        logger.info(
+          {
+            action: 'deposits.cached.recheck.inactive',
+            upstream: 'base_rpc',
+            job_id: jobId,
+            deposit_id: Number(id),
+          },
+          'Cached deposit is no longer active'
+        );
       }
     } catch (err) {
-      console.log(`⚠️ Failed to fetch deposit ${id}:`, err.message);
+      logger.warn(
+        {
+          action: 'deposits.cached.recheck.error',
+          upstream: 'base_rpc',
+          job_id: jobId,
+          deposit_id: Number(id),
+          err,
+        },
+        'Failed to fetch cached deposit'
+      );
     }
   }
 
   // Scan from 0 to depositCounter - 1
-  console.log(`🔍 Scanning deposits from 0 to ${depositCount}...`);
+  logger.info(
+    {
+      action: 'deposits.scan.start',
+      upstream: 'base_rpc',
+      job_id: jobId,
+      max_deposit_id: Number(depositCount),
+    },
+    'Scanning all deposits'
+  );
+
   const numDepositCount = Number(depositCount);
   for (let i = 0; i < numDepositCount; i++) {
     try {
       const deposit = await escrow.getDeposit(i);
       if (deposit.acceptingIntents) {
         if (!activeDepositIds.has(i)) {
-          console.log(`🆕 Deposit ${i} is ACTIVE`);
+          logger.info(
+            {
+              action: 'deposits.scan.active_found',
+              upstream: 'base_rpc',
+              job_id: jobId,
+              deposit_id: i,
+            },
+            'Found new active deposit'
+          );
         }
         activeDepositIds.add(i);
       }
     } catch (err) {
       // Deposit might not exist, skip it
       if (!err.message.includes('DepositNotFound')) {
-        console.error(`❌ Error fetching deposit ${i}:`, err.message);
+        logger.error(
+          {
+            action: 'deposits.fetch.error',
+            upstream: 'base_rpc',
+            job_id: jobId,
+            deposit_id: i,
+            err,
+          },
+          'Error fetching deposit'
+        );
       }
     }
   }
 
-  const finalIds = Array.from(activeDepositIds).map(id => Number(id)).sort((a, b) => a - b);
+  const finalIds = Array.from(activeDepositIds)
+    .map((id) => Number(id))
+    .sort((a, b) => a - b);
+
   saveCachedIds(finalIds);
-  console.log(`\n✅ Cached ${finalIds.length} active deposit IDs.`);
+
+  logger.info(
+    {
+      action: 'scanner.job.finish',
+      job_id: jobId,
+      active_count: finalIds.length,
+      duration_ms: Date.now() - scanStartedAt,
+    },
+    'Cached active deposit IDs'
+  );
 }
 
-scanDeposits();
+scanDeposits()
+  .catch((err) => {
+    logger.error(
+      {
+        action: 'scanner.job.error',
+        err,
+      },
+      'Active deposit scan failed'
+    );
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await flushLogs();
+  });

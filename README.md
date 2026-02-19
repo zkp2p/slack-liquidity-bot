@@ -7,6 +7,8 @@ A Slack bot that provides automated liquidity reporting for blockchain deposits.
 - **Slash Commands**: `/liquidity` - Get current liquidity report
 - **Automated Reports**: Hourly reports sent to Slack channel
 - **Blockchain Integration**: Real-time data from Base network
+- **OpenTelemetry Tracing**: OTLP trace export to Better Stack with batch processing
+- **Pino Trace Correlation**: `trace_id` and `span_id` injected into logs from active context
 - **Heroku Deployment**: 24/7 operation with scheduled jobs
 
 ## Setup
@@ -75,6 +77,38 @@ A Slack bot that provides automated liquidity reporting for blockchain deposits.
 | `SLACK_CLIENT_SECRET` | App Client Secret | Yes |
 | `SLACK_CHANNEL_ID` | Channel for reports | Yes |
 | `BASE_RPC_URL` | Base network RPC URL | Yes |
+| `LOG_LEVEL` | Pino log level (`debug`, `info`, `warn`, `error`) | No |
+| `SERVICE_NAME` | Service name included in structured logs | No |
+| `BETTERSTACK_SOURCE_TOKEN` | Better Stack source token for direct ingestion | No |
+| `BETTERSTACK_ENDPOINT` | Better Stack ingest endpoint base URL (for logs and traces; traces use `/v1/traces`) | No |
+| `OTEL_TRACING_ENABLED` | Enable tracing bootstrap (`true`/`false`) | No (default `true`) |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Standard OTLP exporter headers (`k=v,k2=v2`) | No |
+| `OTEL_TRACES_SAMPLE_RATIO` | Parent-based trace sampling ratio (`0.0`-`1.0`) | No (default `0.1`) |
+| `OTEL_BSP_MAX_QUEUE_SIZE` | BatchSpanProcessor queue size | No (default `2048`) |
+| `OTEL_BSP_MAX_EXPORT_BATCH_SIZE` | BatchSpanProcessor max batch size | No (default `512`) |
+| `OTEL_BSP_SCHEDULE_DELAY` | Batch export delay (ms) | No (default `5000`) |
+| `OTEL_BSP_EXPORT_TIMEOUT` | Batch export timeout (ms) | No (default `30000`) |
+| `OTEL_SHUTDOWN_TIMEOUT` | Tracing shutdown timeout (ms) | No (default `5000`) |
+
+## Structured Log Schema
+
+All runtime logs are JSON and include these normalized fields for Better Stack queries:
+
+- `timestamp`, `level`, `service`, `env`, `schema_version`
+- `component`, `action`, `success`, `upstream`
+- optional correlation keys: `request_id`, `job_id`
+- optional diagnostics: `duration_ms`, `status_code`, `error_message`, `error_stack`, `error_name`
+- trace correlation keys when an active span exists: `trace_id`, `span_id`, `trace_flags`
+
+## OpenTelemetry Bootstrap
+
+Tracing is preloaded with `--require ./observability/register.js` in all runtime scripts (`start`, `scheduler`, `scan`, and `test`).
+
+This enables:
+- auto instrumentation for `http`, `express`, and `undici` (`fetch`)
+- `pino` log correlation via OpenTelemetry's `instrumentation-pino`
+- disabled OpenTelemetry log sending (`disableLogSending: true`) so only tracing is used
+- graceful trace flush on shutdown through patched `process.exit`
 
 ## Usage
 
