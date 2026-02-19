@@ -46,8 +46,22 @@ function convertToDiscordEmbed(slackBlocks) {
   };
 }
 
+function logNotificationPreSend({ jobId, upstream, channelId }) {
+  logger.info(
+    {
+      action: 'scheduler.notification.pre_send',
+      upstream,
+      job_id: jobId,
+      channel_id: channelId,
+      notification_type: 'hourly_liquidity_report',
+    },
+    'About to send hourly report notification'
+  );
+}
+
 async function sendToSlack(report, jobId) {
   const sendStartedAt = Date.now();
+  logNotificationPreSend({ jobId, upstream: 'slack', channelId: SLACK_CHANNEL_ID });
 
   try {
     await slack.chat.postMessage({
@@ -99,6 +113,7 @@ async function sendToDiscord(report, jobId) {
   }
 
   const sendStartedAt = Date.now();
+  logNotificationPreSend({ jobId, upstream: 'discord' });
 
   try {
     const discordPayload = convertToDiscordEmbed(report.blocks);

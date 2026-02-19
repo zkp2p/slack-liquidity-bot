@@ -100,6 +100,10 @@ All runtime logs are JSON and include these normalized fields for Better Stack q
 - optional diagnostics: `duration_ms`, `status_code`, `error_message`, `error_stack`, `error_name`
 - trace correlation keys when an active span exists: `trace_id`, `span_id`, `trace_flags`
 
+Notification health signal:
+- `action = "scheduler.notification.pre_send"` emitted right before each Slack/Discord notification attempt
+- `upstream` identifies target channel: `slack` or `discord`
+
 ## OpenTelemetry Bootstrap
 
 Tracing is preloaded with `--require ./observability/register.js` in all runtime scripts (`start`, `scheduler`, `scan`, and `test`).
